@@ -373,6 +373,7 @@ footer {
 <div style="margin-top: 30px;">
 
 </div>
+<div id="unassigned-subjects-summary" style="margin-top: 20px; padding: 10px; border: 2px dashed #e74c3c; border-radius: 8px; background: #fdecea; color: #c0392b; display: none;"></div>
 
 <!-- Add this modal HTML to your page -->
 <div id="customConfirm" style="display:none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; border: 1px solid #ccc; padding: 20px; box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1); z-index: 1000;">
@@ -395,7 +396,7 @@ Generate accurate class timetables per stream and get automatic teacher timetabl
 const assignments = {};
 const subjects = {
    fivePerWeek: ['Chemistry', 'Physics', 'Biology', 'Geography'],
-   fourPerWeek: ['History', 'Geography', 'CRE', 'Computer', 'Home Science', 'Business', 'Agriculture'],
+   fourPerWeek: ['History', 'Geography', 'CRE',  'Business', 'Agriculture'],
   twoPerWeek: ['PE'],
   sixPerWeek: ['Kiswahili'],
   sevenPerWeek: ['Maths'],
@@ -550,6 +551,7 @@ window.onload = function () {
     }
   });
 }
+
 function saveAssignments(wizard = false) {
   const grade = document.getElementById(wizard ? 'wiz-assign-grade' : 'assign-grade').value;
 
@@ -558,7 +560,6 @@ function saveAssignments(wizard = false) {
     return;
   }
 
-  // Clear any previous assignments for this grade
   assignments[grade] = {};
 
   const subjectLists = [
@@ -570,20 +571,32 @@ function saveAssignments(wizard = false) {
     subjects.eightPerWeek || []
   ];
 
-  // Combine and deduplicate all subject names
   const allSubjects = subjectLists.flat().filter((v, i, a) => a.indexOf(v) === i);
+  const unassignedSubjects = [];
 
   allSubjects.forEach(subj => {
     const elementId = `${wizard ? 'wiz-' : ''}g${grade}-${subj}`;
     const teacherId = document.getElementById(elementId)?.value;
 
-    // Only save if a teacher is assigned
     if (teacherId && teacherId.trim() !== '') {
       assignments[grade][subj] = teacherId;
+    } else {
+      unassignedSubjects.push(subj);
     }
   });
 
   showCustomAlert(`Assignments for Grade ${grade} saved.`, 'green');
+
+  // Show unassigned subjects
+  const summaryDiv = document.getElementById("unassigned-subjects-summary");
+  if (unassignedSubjects.length > 0) {
+    summaryDiv.innerHTML = `<strong>Unassigned Subjects for ${grade}:</strong><ul style="margin-top: 5px;">` +
+      unassignedSubjects.map(s => `<li>${s}</li>`).join('') +
+      `</ul>`;
+    summaryDiv.style.display = 'block';
+  } else {
+    summaryDiv.style.display = 'none';
+  }
 }
 
 
@@ -658,18 +671,20 @@ function generateSchedule(grade) {
     { subjects: subjects.fourPerWeek || [], count: 4 },
     { subjects: subjects.twoPerWeek || [], count: 2 }
   ];
+// Get subjects actually assigned for this grade
+const assignedSubjects = Object.keys(assign);
+const allSubjectsPerWeek = {};
 
-  const assignedSubjects = [];
-  const allSubjectsPerWeek = {};
-
-  allSubjectGroups.forEach(({ subjects, count }) => {
-    subjects.forEach(subj => {
-      if (assign[subj]) {
-        assignedSubjects.push(subj);
-        allSubjectsPerWeek[subj] = count;
-      }
-    });
-  });
+// Only assign frequency if it was assigned — look up its intended frequency
+assignedSubjects.forEach(subj => {
+  if (subjects.eightPerWeek.includes(subj)) allSubjectsPerWeek[subj] = 8;
+  else if (subjects.sevenPerWeek.includes(subj)) allSubjectsPerWeek[subj] = 7;
+  else if (subjects.sixPerWeek.includes(subj)) allSubjectsPerWeek[subj] = 6;
+  else if (subjects.fivePerWeek.includes(subj)) allSubjectsPerWeek[subj] = 5;
+  else if (subjects.fourPerWeek.includes(subj)) allSubjectsPerWeek[subj] = 4;
+  else if (subjects.twoPerWeek.includes(subj)) allSubjectsPerWeek[subj] = 2;
+  else allSubjectsPerWeek[subj] = 1;
+});
 
   days.forEach(day => {
     schedule[day] = Array(periods.length).fill('');
@@ -710,7 +725,7 @@ function generateSchedule(grade) {
   assignedSubjects.forEach(s => subjectPlacedCount[s] = 0);
 
   // ? STEP 0: Force one double lesson per week for selected subjects
-  const doubleSubjects = ['Maths', 'Chemistry', 'Biology', 'Physics'];
+  const doubleSubjects = ['Maths', 'Chemistry', 'Biology', 'Physics'].filter(s => assignedSubjects.includes(s));
 const doubleLessonPairs = [
   [0, 1], [3, 4], [6, 7]
 ];
